@@ -15,13 +15,14 @@
 //! While a window is minimized GPUI pauses its frame loop, so the render
 //! cycle would never drain the queues and the window would stay hidden until
 //! the user restores it by hand. After queueing a message the listener
-//! therefore wakes the main thread ([`wake_minimized_windows`]) to restore
-//! any minimized window that is about to process it.
+//! therefore restores any minimized window of this process directly with
+//! thread-safe Win32 calls (see
+//! [`crate::fulgur::utils::window_activation::restore_minimized_process_windows`]);
+//! the resulting `WM_SIZE` resumes the frame loop so the queued message is
+//! processed on the next frame.
 
 use crate::fulgur::utils::worker::Worker;
 use crate::fulgur::utils::window_activation;
-use crate::fulgur::window_manager::WindowManager;
-use gpui_kit::{App, ForegroundExecutor};
 use parking_lot::Mutex;
 use std::{
     io::{BufRead, BufReader, Write},
@@ -106,9 +107,6 @@ pub fn try_send_command_to_existing_instance(cmd: &str) -> bool {
 /// ### Arguments
 /// - `pending_files`: Shared queue to receive file paths forwarded by other instances
 /// - `pending_ipc_commands`: Shared queue to receive command strings forwarded by other instances
-/// - `foreground_executor`: Executor used to wake the main thread so a
-///   minimized window can be restored (its frame loop is paused while
-///   minimized, so the render cycle would never drain the queues otherwise)
 ///
 /// ### Returns
 /// - `Some(Worker)`: The Drop-owned listener worker; dropping it stops the
@@ -118,7 +116,6 @@ pub fn try_send_command_to_existing_instance(cmd: &str) -> bool {
 pub fn start_ipc_listener(
     pending_files: Arc<Mutex<Vec<PathBuf>>>,
     pending_ipc_commands: Arc<Mutex<Vec<String>>>,
-    foreground_executor: ForegroundExecutor,
 ) -> Option<Worker> {
     let listener = match TcpListener::bind(("127.0.0.1", IPC_PORT)) {
         Ok(l) => l,
@@ -147,7 +144,7 @@ pub fn start_ipc_listener(
                             if let Some(cmd) = line.strip_prefix(CMD_PREFIX) {
                                 log::info!("IPC: received command '{cmd}'");
                                 pending_ipc_commands.lock().push(cmd.to_string());
-                                wake_minimized_windows(&foreground_executor);
+                                window_activation::restore_minimized_process_windows();
                             } else {
                                 let path = PathBuf::from(&line);
                                 if path.exists() {
@@ -156,7 +153,7 @@ pub fn start_ipc_listener(
                                         path.display()
                                     );
                                     pending_files.lock().push(path);
-                                    wake_minimized_windows(&foreground_executor);
+                                    window_activation::restore_minimized_process_windows();
                                 }
                             }
                         }
@@ -173,39 +170,4 @@ pub fn start_ipc_listener(
         let _ = TcpStream::connect(("127.0.0.1", IPC_PORT));
     });
     Some(worker)
-}
-
-/// Wake the main thread to restore the minimized window that will process
-/// the message just queued by the IPC listener.
-///
-/// While a window is minimized GPUI pauses its frame loop, so the render
-/// cycle (which drains `pending_files` / `pending_ipc_commands`) never runs
-/// and the window would stay hidden until the user restores it by hand.
-/// Restoring the window resumes the frame loop, so the queued message is
-/// processed on the next frame.
-///
-/// The window that processes the queues is the last-focused one (or any
-/// window if none has been focused yet), so only that window is restored;
-/// other minimized windows are left alone.
-fn wake_minimized_windows(foreground_executor: &ForegroundExecutor) {
-    foreground_executor
-        .spawn(async move |cx: &mut App| {
-            let last_focused = cx
-                .try_global::<WindowManager>()
-                .and_then(|wm| wm.get_last_focused());
-            for handle in cx.windows() {
-                let should_wake = last_focused.is_none_or(|id| handle.window_id() == id);
-                if !should_wake {
-                    continue;
-                }
-                let _ = handle.update(cx, |_, window, _| {
-                    if window_activation::is_minimized(window) {
-                        log::info!("IPC: window is minimized, restoring it");
-                        window.activate_window();
-                        window.request_animation_frame();
-                    }
-                });
-            }
-        })
-        .detach();
 }
