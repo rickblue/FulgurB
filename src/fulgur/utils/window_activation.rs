@@ -32,7 +32,7 @@ pub fn restore_minimized_window(window: &Window) {
 
 /// Returns whether the native window behind `window` is minimized (iconified).
 #[cfg(target_os = "windows")]
-fn is_minimized(window: &Window) -> bool {
+pub fn is_minimized(window: &Window) -> bool {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use windows::Win32::{
         Foundation::HWND,

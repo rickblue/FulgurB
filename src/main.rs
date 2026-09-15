@@ -283,10 +283,12 @@ fn main() {
         // We grab the two arcs from the global so there's a single source of truth,
         // and store the Drop-owned worker back on it so the listener has an owner.
         #[cfg(target_os = "windows")]
-        cx.update_global::<fulgur::shared_state::SharedAppState, _>(|shared, _| {
+        cx.update_global::<fulgur::shared_state::SharedAppState, _>(|shared, cx| {
             let pf = shared.pending_files_from_macos.clone();
             let pic = shared.pending_ipc_commands.clone();
-            shared.ipc_listener = fulgur::utils::single_instance::start_ipc_listener(pf, pic);
+            let foreground = cx.foreground_executor();
+            shared.ipc_listener =
+                fulgur::utils::single_instance::start_ipc_listener(pf, pic, foreground);
         });
         cx.set_global(fulgur::window_manager::WindowManager::new());
         fulgur::window_manager::system_menus::init(cx);
