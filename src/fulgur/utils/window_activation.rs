@@ -43,7 +43,10 @@ fn is_minimized(window: &Window) -> bool {
         return false;
     };
     match handle.as_raw() {
-        RawWindowHandle::Win32(win32) => unsafe { IsIconic(HWND(win32.hwnd)).as_bool() },
+        RawWindowHandle::Win32(win32) => {
+            let hwnd = HWND(win32.hwnd.get() as *mut _);
+            unsafe { IsIconic(hwnd).as_bool() }
+        }
         _ => false,
     }
 }
