@@ -146,6 +146,7 @@ dbus-secret-service-keyring-store = { version = "1.0.1", features = ["crypto-rus
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-native-keyring-store = "1.1.0"
+raw-window-handle = "0.6.2"
 windows = { version = "0.62.1", features = [
     "Win32_Foundation",
     "Win32_System_Com",
@@ -154,6 +155,7 @@ windows = { version = "0.62.1", features = [
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
     "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]

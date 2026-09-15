@@ -13,4 +13,5 @@ pub mod sanitize;
 pub mod single_instance;
 pub mod updater;
 pub mod utilities;
+pub mod window_activation;
 pub mod worker;

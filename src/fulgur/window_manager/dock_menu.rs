@@ -210,11 +210,13 @@ impl Fulgur {
                 Vec::new()
             }
         };
+        let mut opened_new_tab = false;
         for cmd in commands {
             match cmd.as_str() {
                 "new-tab" => {
                     log::info!("IPC: opening new tab");
                     self.new_tab(window, cx);
+                    opened_new_tab = true;
                 }
                 "new-window" => {
                     log::info!("IPC: opening new window");
@@ -224,6 +226,13 @@ impl Fulgur {
                     log::warn!("IPC: unknown command '{other}'");
                 }
             }
+        }
+        if opened_new_tab {
+            // A tab opened in a minimized window would be invisible; restore
+            // and focus the window so the new tab is visible. ("new-window"
+            // activates its own window, so it is intentionally not handled
+            // here.)
+            crate::fulgur::utils::window_activation::restore_minimized_window(window);
         }
     }
 }

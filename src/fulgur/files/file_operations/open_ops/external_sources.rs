@@ -120,8 +120,15 @@ impl Fulgur {
         } else {
             Vec::new()
         };
+        let had_pending_files = !files_to_open.is_empty();
         for file_path in files_to_open {
             self.handle_open_file_from_cli(window, cx, file_path);
+        }
+        if had_pending_files {
+            // If the window was minimized (e.g. the file was opened by
+            // double-click while the window sat in the taskbar), restore and
+            // focus it so the newly opened file is visible.
+            crate::fulgur::utils::window_activation::restore_minimized_window(window);
         }
     }
 }

@@ -1,0 +1,67 @@
+name: Build Windows x64
+
+# Builds the patched Windows x64 release executable and publishes it as a
+# downloadable artifact (Fulgur-windows-x64). Triggered on every push to the
+# default branch and manually via the Actions "Run workflow" button.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # GPUI has large stack frames; the default 2 MiB libtest thread stack
+  # overflows on Windows (1 MiB main stack). Mirrors ci.yml.
+  RUST_MIN_STACK: '16777216'
+
+jobs:
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # ssh2 vendored-openssl requires NASM and Perl to compile OpenSSL from
+      # source on Windows.
+      - name: Install NASM (Windows)
+        uses: ilammy/setup-nasm@v1
+
+      # Pin OpenSSL build to the runner's pre-installed Strawberry Perl
+      # because Git Bash's MSYS2 perl resolves first on PATH and is missing
+      # modules like Locale::Maketext::Simple. Mirrors release.yml.
+      - name: Pin OpenSSL build to Strawberry Perl (Windows)
+        shell: pwsh
+        run: echo "OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe" >> $env:GITHUB_ENV
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-x64-release
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Package executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item target\release\Fulgur.exe artifacts\Fulgur.exe
+          $hash = (Get-FileHash artifacts\Fulgur.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  Fulgur.exe" | Out-File -Encoding utf8NoBOM artifacts\Fulgur.exe.sha256
+          Write-Host "Artifacts:"
+          Get-ChildItem artifacts
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Fulgur-windows-x64
+          path: artifacts/*
+          if-no-files-found: error
