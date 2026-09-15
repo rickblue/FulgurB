@@ -130,7 +130,7 @@ unsafe extern "system" fn restore_minimized_windows_callback(
     unsafe {
         // Bring the window to the top of the Z order; this is not subject to
         // the foreground lock, so the window is at least visible in front.
-        let _ = SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        let _ = SetWindowPos(hwnd, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
         // Best effort: take the keyboard foreground as well. Windows only
         // allows this for the process that generated the last input event, so
         // simulate one first (the same trick GPUI's own activation uses).
