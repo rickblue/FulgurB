@@ -116,6 +116,11 @@ unsafe extern "system" fn restore_minimized_windows_callback(
     log::info!("IPC: window is minimized, restoring it");
     unsafe {
         let _ = ShowWindow(hwnd, SW_RESTORE);
+    }
+    // Give the window thread a moment to finish the restore; taking the
+    // foreground while the window is still transitioning can fail silently.
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    unsafe {
         let inputs = [
             INPUT {
                 r#type: INPUT_KEYBOARD,
