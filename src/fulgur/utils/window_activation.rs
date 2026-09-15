@@ -92,10 +92,9 @@ pub fn restore_minimized_process_windows() {
 unsafe extern "system" fn restore_minimized_windows_callback(
     hwnd: windows::Win32::Foundation::HWND,
     _lparam: windows::Win32::Foundation::LPARAM,
-) -> windows::Win32::Foundation::BOOL {
+) -> windows::core::BOOL {
     use windows::Win32::{
-        Foundation::BOOL,
-        Input::KeyboardAndMouse::{
+        UI::Input::KeyboardAndMouse::{
             INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput, VK_MENU,
         },
         UI::WindowsAndMessaging::{
@@ -108,10 +107,10 @@ unsafe extern "system" fn restore_minimized_windows_callback(
         let _ = GetWindowThreadProcessId(hwnd, Some(&mut pid));
     }
     if pid != std::process::id() as u32 {
-        return BOOL::from(true);
+        return windows::core::BOOL::from(true);
     }
     if !unsafe { IsIconic(hwnd).as_bool() } {
-        return BOOL::from(true);
+        return windows::core::BOOL::from(true);
     }
 
     log::info!("IPC: window is minimized, restoring it");
@@ -141,5 +140,5 @@ unsafe extern "system" fn restore_minimized_windows_callback(
         let _ = SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
         let _ = SetForegroundWindow(hwnd);
     }
-    BOOL::from(true)
+    windows::core::BOOL::from(true)
 }
