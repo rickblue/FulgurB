@@ -61,15 +61,22 @@ pub fn is_minimized(window: &Window) -> bool {
     }
 }
 
-/// Restore every minimized top-level window of this process and bring the
-/// restored windows to the foreground.
+/// Restore every minimized top-level window of this process, bring the
+/// restored windows to the top of the Z order, and (best effort) give them
+/// the keyboard foreground.
 ///
 /// This is called from the IPC listener thread (a background thread) as soon
 /// as a file or command has been queued for the render cycle. All Win32
-/// calls used here are thread-safe: `ShowWindow` posts a message to the
-/// owning window thread, whose message pump keeps running even while GPUI's
-/// frame loop is paused, so the frame loop resumes when the window is
+/// calls used here are thread-safe: `ShowWindow`/`SetWindowPos` post messages
+/// to the owning window thread, whose message pump keeps running even while
+/// GPUI's frame loop is paused, so the frame loop resumes when the window is
 /// restored and the queued file is opened on the next frame.
+///
+/// The foreground takeover (simulated Alt key press + `SetForegroundWindow`)
+/// is best effort: Windows only grants it to the process that generated the
+/// last input event, which depends on the interactive context. The Z-order
+/// raise is not subject to that lock, so the window is always at least
+/// visible in front.
 #[cfg(target_os = "windows")]
 pub fn restore_minimized_process_windows() {
     use windows::Win32::{
@@ -98,7 +105,8 @@ unsafe extern "system" fn restore_minimized_windows_callback(
             INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput, VK_MENU,
         },
         UI::WindowsAndMessaging::{
-            GetWindowThreadProcessId, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE,
+            GetWindowThreadProcessId, HWND_TOP, IsIconic, SetForegroundWindow, SetWindowPos,
+            ShowWindow, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
         },
     };
 
@@ -117,10 +125,15 @@ unsafe extern "system" fn restore_minimized_windows_callback(
     unsafe {
         let _ = ShowWindow(hwnd, SW_RESTORE);
     }
-    // Give the window thread a moment to finish the restore; taking the
-    // foreground while the window is still transitioning can fail silently.
+    // Give the window thread a moment to finish the restore.
     std::thread::sleep(std::time::Duration::from_millis(100));
     unsafe {
+        // Bring the window to the top of the Z order; this is not subject to
+        // the foreground lock, so the window is at least visible in front.
+        let _ = SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        // Best effort: take the keyboard foreground as well. Windows only
+        // allows this for the process that generated the last input event, so
+        // simulate one first (the same trick GPUI's own activation uses).
         let inputs = [
             INPUT {
                 r#type: INPUT_KEYBOARD,
